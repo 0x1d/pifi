@@ -31,3 +31,15 @@ export WIFI_PASSWORD="my password"
 
 sudo -E ./pifi wlan0 up
 ```
+
+## Troubleshooting
+
+### No internet access
+
+If a client is connected to the hotspot and the RaspberryPI is connected to the internet via ethernet but no internet access is available for the client, try to enable IPv4 forwarding in `/etc/sysctl.conf`, reload the configuration and restart NetworkManager.
+
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+sudo sysctl -p /etc/sysctl.conf
+sudo systemctl restart NetworkManager
+```
