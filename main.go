@@ -170,7 +170,7 @@ func main() {
 				"type":        dbus.MakeVariant("802-11-wireless"),
 				"uuid":        dbus.MakeVariant(ourUUID),
 				"id":          dbus.MakeVariant(ssid),
-				"autoconnect": dbus.MakeVariant(false),
+				"autoconnect": dbus.MakeVariant(true),
 			},
 			"802-11-wireless": {
 				"ssid":    dbus.MakeVariant([]byte(ssid)),
