@@ -1,8 +1,7 @@
 # PiFi
 
 This is a simple tool to create and manage a hotspot on a Raspberry Pi (ARM64).  
-The code is based on https://github.com/NetworkManager/NetworkManager/blob/main/examples/python/dbus/wifi-hotspot.py
-and adds following features:
+The code is based on https://github.com/NetworkManager/NetworkManager/blob/main/examples/python/dbus/wifi-hotspot.py, rewritten in Go and adds following features:
 
 - Environment variables or intput parameters for SSID and password
 - Option to remove the connection
