@@ -97,13 +97,7 @@ func removeConnection(conn *dbus.Conn, connPath dbus.ObjectPath) error {
 	return nil
 }
 
-func main() {
-	if len(os.Args) < 3 {
-		usage()
-	}
-	iface := os.Args[1]
-	op := os.Args[2]
-
+func getSettings(op string) (string, string) {
 	// Get SSID and password from args, env vars or use defaults
 	ssid := defaultSSID
 	password := defaultPassword
@@ -122,12 +116,10 @@ func main() {
 		password = os.Args[4]
 	}
 
-	// Connect to the system bus
-	conn, err := dbus.SystemBus()
-	if err != nil {
-		log.Fatalf("Failed to connect to system bus: %v", err)
-	}
+	return ssid, password
+}
 
+func getConnectionPath(conn *dbus.Conn, connUUID string) (dbus.ObjectPath, error) {
 	// Get the Settings interface
 	settingsObj := conn.Object(
 		"org.freedesktop.NetworkManager",
@@ -136,11 +128,11 @@ func main() {
 
 	// List existing connections
 	var paths []dbus.ObjectPath
-	err = settingsObj.
+	err := settingsObj.
 		Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).
 		Store(&paths)
 	if err != nil {
-		log.Fatalf("ListConnections failed: %v", err)
+		return "", fmt.Errorf("ListConnections failed: %v", err)
 	}
 
 	// Look up our connection by UUID
@@ -157,47 +149,58 @@ func main() {
 		if err != nil {
 			continue
 		}
-		if v, ok := cfg["connection"]["uuid"].Value().(string); ok && v == ourUUID {
+		if v, ok := cfg["connection"]["uuid"].Value().(string); ok && v == connUUID {
 			connPath = p
 			break
 		}
 	}
 
-	// If not found, add it
-	if connPath == "" {
-		settingsMap := map[string]map[string]dbus.Variant{
-			"connection": {
-				"type":        dbus.MakeVariant("802-11-wireless"),
-				"uuid":        dbus.MakeVariant(ourUUID),
-				"id":          dbus.MakeVariant(ssid),
-				"autoconnect": dbus.MakeVariant(true),
-			},
-			"802-11-wireless": {
-				"ssid":    dbus.MakeVariant([]byte(ssid)),
-				"mode":    dbus.MakeVariant("ap"),
-				"band":    dbus.MakeVariant("bg"),
-				"channel": dbus.MakeVariant(uint32(1)),
-			},
-			"802-11-wireless-security": {
-				"key-mgmt": dbus.MakeVariant("wpa-psk"),
-				"psk":      dbus.MakeVariant(password),
-			},
-			"ipv4": {
-				"method": dbus.MakeVariant("shared"),
-			},
-			"ipv6": {
-				"method": dbus.MakeVariant("ignore"),
-			},
-		}
+	return connPath, nil
+}
 
-		err = settingsObj.
-			Call("org.freedesktop.NetworkManager.Settings.AddConnection", 0, settingsMap).
-			Store(&connPath)
-		if err != nil {
-			log.Fatalf("AddConnection failed: %v", err)
-		}
+func addConnection(conn *dbus.Conn, ssid string, password string) (dbus.ObjectPath, error) {
+	settingsObj := conn.Object(
+		"org.freedesktop.NetworkManager",
+		"/org/freedesktop/NetworkManager/Settings",
+	)
+
+	settingsMap := map[string]map[string]dbus.Variant{
+		"connection": {
+			"type":        dbus.MakeVariant("802-11-wireless"),
+			"uuid":        dbus.MakeVariant(ourUUID),
+			"id":          dbus.MakeVariant(ssid),
+			"autoconnect": dbus.MakeVariant(true),
+		},
+		"802-11-wireless": {
+			"ssid":    dbus.MakeVariant([]byte(ssid)),
+			"mode":    dbus.MakeVariant("ap"),
+			"band":    dbus.MakeVariant("bg"),
+			"channel": dbus.MakeVariant(uint32(1)),
+		},
+		"802-11-wireless-security": {
+			"key-mgmt": dbus.MakeVariant("wpa-psk"),
+			"psk":      dbus.MakeVariant(password),
+		},
+		"ipv4": {
+			"method": dbus.MakeVariant("shared"),
+		},
+		"ipv6": {
+			"method": dbus.MakeVariant("ignore"),
+		},
 	}
 
+	var connPath dbus.ObjectPath
+	err := settingsObj.
+		Call("org.freedesktop.NetworkManager.Settings.AddConnection", 0, settingsMap).
+		Store(&connPath)
+	if err != nil {
+		return "", fmt.Errorf("AddConnection failed: %v", err)
+	}
+
+	return connPath, nil
+}
+
+func getDevicePath(conn *dbus.Conn, iface string) (dbus.ObjectPath, error) {
 	// Get the NetworkManager interface
 	nmObj := conn.Object(
 		"org.freedesktop.NetworkManager",
@@ -206,11 +209,46 @@ func main() {
 
 	// Find the device by interface name
 	var devPath dbus.ObjectPath
-	err = nmObj.
+	err := nmObj.
 		Call("org.freedesktop.NetworkManager.GetDeviceByIpIface", 0, iface).
 		Store(&devPath)
 	if err != nil {
-		log.Fatalf("GetDeviceByIpIface(%s) failed: %v", iface, err)
+		return "", fmt.Errorf("GetDeviceByIpIface(%s) failed: %v", iface, err)
+	}
+
+	return devPath, nil
+}
+
+func main() {
+	if len(os.Args) < 3 {
+		usage()
+	}
+	iface := os.Args[1]
+	op := os.Args[2]
+
+	ssid, password := getSettings(op)
+
+	// Connect to the system bus
+	conn, err := dbus.SystemBus()
+	if err != nil {
+		log.Fatalf("Failed to connect to system bus: %v", err)
+	}
+
+	connPath, err := getConnectionPath(conn, ourUUID)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if connPath == "" {
+		connPath, err = addConnection(conn, ssid, password)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	devPath, err := getDevicePath(conn, iface)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	switch op {
