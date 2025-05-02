@@ -15,6 +15,7 @@ make build
 ## Usage
 
 ```bash
+# sudo ./pifi <ifname> [up|down|remove] [ssid] [password]
 sudo ./pifi wlan0 up "My Hotspot" "my password"
 sudo ./pifi wlan0 down
 sudo ./pifi wlan0 remove
